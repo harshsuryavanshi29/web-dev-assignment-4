@@ -1,0 +1,118 @@
+{
+  "info": {
+    "_postman_id": "f1746ed3-5fc0-4b2c-a225-a3bc7049c968",
+    "name": "Secure Connect API",
+    "description": "Manual-authentication, personal notes, admin RBAC, and health-check tests for Secure Connect Platform. Select the Secure Connect Local environment and run requests in order.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "1. Health check",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/health" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Health check returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Database is connected', function () { pm.expect(pm.response.json().database).to.eql('connected'); });"] } }]
+    },
+    {
+      "name": "2. Signup",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"username\": \"{{username}}\",\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\",\n  \"role\": \"admin\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/auth/signup"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Signup returns 201', function () { pm.response.to.have.status(201); });", "const body = pm.response.json();", "pm.test('Response contains safe public user fields', function () { pm.expect(body.id).to.be.a('string'); pm.expect(body.username).to.eql(pm.environment.get('username')); pm.expect(body.email).to.eql(pm.environment.get('userEmail')); pm.expect(body).not.to.have.property('password'); });", "pm.environment.set('userId', body.id);"] } }]
+    },
+    {
+      "name": "3. Login",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login returns 200', function () { pm.response.to.have.status(200); });", "const body = pm.response.json();", "pm.test('A JWT is returned', function () { pm.expect(body.token).to.be.a('string').and.not.empty; });", "pm.environment.set('token', body.token);", "pm.environment.set('userToken', body.token);"] } }]
+    },
+    {
+      "name": "4. Get current user",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/auth/me" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Current-user route is protected and successful', function () { pm.response.to.have.status(200); });", "pm.test('Current user has expected ID and no password hash', function () { const body = pm.response.json(); pm.expect(body.id).to.eql(pm.environment.get('userId')); pm.expect(body).not.to.have.property('password'); });"] } }]
+    },
+    {
+      "name": "5. Get notes without token",
+      "request": { "auth": { "type": "noauth" }, "method": "GET", "header": [], "url": "{{baseUrl}}/api/notes" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Missing token is rejected with 403', function () { pm.response.to.have.status(403); });", "pm.test('Error explains missing token', function () { pm.expect(pm.response.json().message).to.eql('No token provided'); });"] } }]
+    },
+    {
+      "name": "6. Create note",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"title\": \"My First Note\",\n  \"content\": \"This is my first note of web dev - III\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/notes"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Note creation returns 201', function () { pm.response.to.have.status(201); });", "const body = pm.response.json();", "pm.test('Created note belongs to authenticated user', function () { pm.expect(body._id).to.be.a('string'); pm.expect(body.owner).to.eql(pm.environment.get('userId')); pm.expect(body.title).to.eql('My First Note'); });", "pm.environment.set('noteId', body._id);"] } }]
+    },
+    {
+      "name": "7. Get all notes",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/notes" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Notes list returns 200 and an array', function () { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an('array'); });", "pm.test('List only contains the current user\\'s notes', function () { pm.response.json().forEach(function (note) { pm.expect(note.owner).to.eql(pm.environment.get('userId')); }); });"] } }]
+    },
+    {
+      "name": "8. Get note by ID",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/notes/{{noteId}}" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Single note returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Returned note ID matches noteId', function () { pm.expect(pm.response.json()._id).to.eql(pm.environment.get('noteId')); });"] } }]
+    },
+    {
+      "name": "9. Update note",
+      "request": {
+        "method": "PUT",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"title\": \"Updated First Note\",\n  \"content\": \"This is my updated note.\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/notes/{{noteId}}"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Note update returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Updated fields are returned', function () { const body = pm.response.json(); pm.expect(body.title).to.eql('Updated First Note'); pm.expect(body.content).to.eql('This is my updated note.'); });"] } }]
+    },
+    {
+      "name": "10. Delete note",
+      "request": { "method": "DELETE", "header": [], "url": "{{baseUrl}}/api/notes/{{noteId}}" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Note deletion returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Deletion is acknowledged', function () { pm.expect(pm.response.json().message).to.eql('Note deleted successfully'); });"] } }]
+    },
+    {
+      "name": "11. Admin login",
+      "request": {
+        "auth": { "type": "noauth" },
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/api/auth/login"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Admin login returns 200', function () { pm.response.to.have.status(200); });", "const token = pm.response.json().token;", "pm.test('Admin JWT exists', function () { pm.expect(token).to.be.a('string').and.not.empty; });", "pm.environment.set('adminToken', token);", "pm.environment.set('token', token);"] } }]
+    },
+    {
+      "name": "12. Get all users as admin",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/admin/users" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Admin can list users', function () { pm.response.to.have.status(200); pm.expect(pm.response.json()).to.be.an('array'); });", "pm.test('User list never includes password hashes', function () { pm.response.json().forEach(function (user) { pm.expect(user).not.to.have.property('password'); }); });"] } }]
+    },
+    {
+      "name": "13. Get admin statistics",
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/api/admin/stats" },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Admin stats returns 200', function () { pm.response.to.have.status(200); });", "pm.test('Statistics include user and note counts', function () { const body = pm.response.json(); pm.expect(body.users).to.be.a('number'); pm.expect(body.notes).to.be.a('number'); });"] } }]
+    },
+    {
+      "name": "14. Admin endpoint as regular user",
+      "request": {
+        "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{userToken}}", "type": "string" }] },
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/admin/users"
+      },
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Regular user is denied admin access', function () { pm.response.to.have.status(403); });"] } }]
+    }
+  ],
+  "event": []
+}
